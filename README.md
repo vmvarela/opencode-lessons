@@ -15,7 +15,7 @@ In `.opencode/opencode.json`:
   "plugins": [
     "oh-my-opencode-slim@latest",
     {
-      "package": "github:vmvarela/opencode-lessons#master",
+      "package": "opencode-lessons@latest",
       "options": {
         "directory": "memory",
         "autoRecall": true,
@@ -26,9 +26,9 @@ In `.opencode/opencode.json`:
 }
 ```
 
-For reproducibility, replace `master` with the full reviewed commit hash. The plugin does not require Slim; omit its entry if you do not use it. Place Lessons after plugins that rewrite model context. It never changes agents, models, MCP connections or approval settings. Do not load it both explicitly and through auto-discovery.
+For reproducibility, pin a published npm version, such as `opencode-lessons@0.1.2`. Git specifications such as `github:vmvarela/opencode-lessons#master` also work; pin a full reviewed commit hash when using Git. The plugin does not require Slim; omit its entry if you do not use it. Place Lessons after plugins that rewrite model context. It never changes agents, models, MCP connections or approval settings. Do not load it both explicitly and through auto-discovery.
 
-For local development, configure an absolute path to this checkout directory. Configured local plugins must be directories; the root `index.js` forwards to the implementation. Relative plugin paths resolve from the configuration file, not the shell's current directory. No build step, SDK download or runtime dependency is required. This package is not published to npm yet.
+For local development, configure an absolute path to this checkout directory. Configured local plugins must be directories; the root `index.js` forwards to the implementation. Relative plugin paths resolve from the configuration file, not the shell's current directory. No build step, SDK download or runtime dependency is required. The package is published on npm as `opencode-lessons`.
 
 Restart/reload OpenCode and check that the commands below appear. If loading fails, inspect OpenCode's plugin status and logs; do not paste credential-bearing resolved configuration. V1 is intentionally unsupported.
 
@@ -159,20 +159,7 @@ As in Model Aliases, publishing is gated by the GitHub repository variable `NPM_
 
 ### First publication
 
-The npm package must exist before its trusted publisher can be configured. From a fresh checkout of `master`, using Node 24 and an npm account authorized to claim `opencode-lessons`:
-
-```bash
-corepack enable
-pnpm install --frozen-lockfile
-pnpm run verify
-pnpm run check:release
-npm login
-npm publish --access public
-git tag v0.1.2
-git push origin v0.1.2
-```
-
-The tag must point at the commit whose package was published. Create/push it only after a successful publication. The bootstrap version is `0.1.2`; subsequent versions come from semantic-release, not manual package edits. Do not recreate an existing tag or republish an existing npm version.
+Version `0.1.2` is published on npm and recorded by the `v0.1.2` Git tag. The bootstrap tag points to the source commit used for that package; subsequent versions are managed by semantic-release. Do not manually bump versions, recreate an existing tag or republish an existing npm version.
 
 ### Automated publication
 
