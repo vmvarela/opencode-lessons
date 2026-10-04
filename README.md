@@ -2,7 +2,7 @@
 
 Keep the lesson. Skip the transcript.
 
-A small OpenCode V2 plugin that proposes scoped, evidence-backed lessons, searches project Markdown memory, and retrieves relevant lessons during work. Durable memory lives in your repository, not in a client database. Works alongside oh-my-opencode-slim without depending on its internals.
+A small OpenCode V2 plugin that proposes scoped, evidence-backed lessons, searches project Markdown memory, and retrieves lessons on demand during work. Durable memory lives in your repository, not in a client database. Works alongside oh-my-opencode-slim without depending on its internals.
 
 ## Install
 
@@ -18,7 +18,7 @@ In `.opencode/opencode.json`:
       "package": "opencode-lessons@latest",
       "options": {
         "directory": "memory",
-        "autoRecall": true,
+        "autoRecall": false,
         "contextBudget": 4000
       }
     }
@@ -44,14 +44,22 @@ Restart/reload OpenCode and check that the commands below appear. If loading fai
 | --- | --- |
 | `/learn` | Ask the active agent for useful lessons from this task |
 | `/learn-search <query>` | Ask the agent to search relevant project lessons |
-| `/learn-review` | Ask the agent to inspect lexical duplicates and obsolete entries |
-| `/learn-promote <lesson-id>` | Prepare reviewed diffs for project context, instructions or a skill |
+| `/learn-review` (deprecated) | Ask the agent to inspect lexical duplicates and obsolete entries |
+| `/learn-promote <lesson-id>` (deprecated) | Prepare reviewed diffs for project context, instructions or a skill |
 | `/learn-accept <proposal-id>` | Save the exact displayed preview locally, without a model call |
 | `/learn-dismiss <proposal-id>` | Discard a preview, without a model call |
 
 Read-only tools available to agents: `lessons_search`, `lessons_propose`, `lessons_review`, `lessons_promote`. OpenCode may expose these through its Code Mode catalog; follow the host's tool catalog to invoke them. There is deliberately no agent tool for accepting a proposal. A direct user command is the save boundary; this is not protection against an untrusted plugin or an agent already authorized to execute arbitrary shell commands. Acceptance and dismissal record a synthetic result with `resume: false`, so they do not restart the model.
 
-## Promote a lesson
+## Transition and Reflect
+
+Automatic recall is now **off by default**, including existing configurations that omit `autoRecall`. Set `autoRecall: true` explicitly to retain the experimental behavior. The four core commands are `/learn`, `/learn-search`, `/learn-accept`, and `/learn-dismiss`.
+
+`/learn-review`, `/learn-promote`, `lessons_review`, and `lessons_promote` remain functional for this transition release and are planned for removal in the following minor release. They are labeled deprecated and return migration guidance. Existing memory files and states remain compatible; no migration or deletion occurs.
+
+With Slim, ask `/reflect` to read accepted `memory/lessons/` entries as scoped evidence when reviewing recurring workflows. Lessons never invokes Reflect, installs a skill, or changes Slim configuration. Without Slim, ask your normal agent to review memory and propose any context/instruction changes.
+
+## Legacy promotion (deprecated)
 
 `/learn-promote <lesson-id>` asks the active agent to turn an accepted lesson into a reviewable proposal, choosing only the destinations that are justified:
 
@@ -115,7 +123,7 @@ Managed states: `recorded`, `proposed`, `incorporated`, `superseded`. Superseded
 
 Search ranks token matches, weighting titles more heavily. It uses no embeddings, remote index or additional model call. Automatic recall searches the latest user message and injects up to three results as explicitly untrusted, scoped evidence. The active agent can search more precisely with `lessons_search`.
 
-`contextBudget` is a snippet-character budget (1000–12000; default 4000), not an exact provider-token limit. IDs, paths and JSON framing add overhead. The policy reminder is always present; `autoRecall: false` disables automatic searches while retaining the tools.
+`contextBudget` is a snippet-character budget (1000–12000; default 4000), not an exact provider-token limit. IDs, paths and JSON framing add overhead. The policy reminder is always present; Automatic searches are experimental and require `autoRecall: true`; the default disables automatic searches while retaining the tools.
 
 Reads are bounded to 500 Markdown files, 256 KiB per file and three nested directory levels. Oversized or malformed managed files produce coverage warnings. No hit is not proof that no lesson exists. Semantic contradictions and obsolescence require human/model review; lexical duplicate hints are not semantic detection.
 

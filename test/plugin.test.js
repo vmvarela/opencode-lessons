@@ -71,7 +71,7 @@ test('dismissal and plugin cleanup remove proposals', async t => {
 });
 
 test('recall injects relevant bounded evidence with trust boundaries and uses latest user text', async t => {
-  const h = await host(t);
+  const h = await host(t, { autoRecall: true });
   await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
   const event = { sessionID: 'session-a', system: [], messages: [{ role: 'assistant', content: 'unrelated' }, { role: 'user', content: [{ type: 'text', text: 'Terraform rulesets' }] }] };
   await h.hooks.get('context')(event);
@@ -84,7 +84,7 @@ test('recall injects relevant bounded evidence with trust boundaries and uses la
 });
 
 test('autoRecall can be disabled without hiding tools or starting another model', async t => {
-  const h = await host(t, { autoRecall: false });
+  const h = await host(t);
   await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
   const event = { sessionID: 'session-a', system: [], messages: [{ role: 'user', content: 'Terraform' }] };
   await h.hooks.get('context')(event);
@@ -116,6 +116,8 @@ test('promotion exposes context review through the tool and user command without
   const plan = await h.call('lessons_promote', { id: proposal.id });
   assert.equal(plan.destinations.find(d => d.type === 'context').path, 'context/');
   assert.equal(plan.writes, false);
+  assert.match(plan.deprecation, /Deprecated/);
+  assert.match(h.commands.get('learn-promote').description, /DEPRECATED/);
   await h.command('learn-promote', proposal.id);
   const prompt = h.messages.at(-1).text;
   assert.match(prompt, /stable project facts in context\//);
