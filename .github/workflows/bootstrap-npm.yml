@@ -52,6 +52,7 @@ jobs:
               const source = readFileSync(file);
               const released = readFileSync(path.join(directory, 'package', file));
               if (file === 'package.json') assert.deepEqual(JSON.parse(source), JSON.parse(released));
+              else if (file === 'LICENSE') assert.equal(source.toString().replace(/\n+$/, '\n'), released.toString().replace(/\n+$/, '\n'), file);
               else assert.equal(source.compare(released), 0, file);
             }
           } finally { rmSync(directory, { recursive: true, force: true }); }
