@@ -121,9 +121,9 @@ Managed states: `recorded`, `proposed`, `incorporated`, `superseded`. Superseded
 
 ## Retrieval and scope
 
-Search ranks token matches, weighting titles more heavily. It uses no embeddings, remote index or additional model call. Automatic recall searches the latest user message and injects up to three results as explicitly untrusted, scoped evidence. The active agent can search more precisely with `lessons_search`.
+Search uses normalized words, ignores common English/Spanish stop words, and weights titles and explicit scope matches. It requires overlapping meaningful terms and favors matches in titles, triggers or tags. This is lexical retrieval: paraphrases with no shared terms may be missed. It uses no embeddings, remote index or additional model call. Automatic recall searches the latest user message and injects up to three results as explicitly untrusted, scoped evidence. The active agent can search more precisely with `lessons_search`.
 
-`contextBudget` is a snippet-character budget (1000–12000; default 4000), not an exact provider-token limit. IDs, paths and JSON framing add overhead. The policy reminder is always present; Automatic searches are experimental and require `autoRecall: true`; the default disables automatic searches while retaining the tools.
+`contextBudget` bounds the complete compact JSON search result (1000–12000 characters; default 4000), including metadata and warnings. It is not a token count. Managed results include complete trigger, action, scope, evidence and limits. If these do not fit, a `needsRead: true` reference points to the file; read it before applying the lesson. `omitted` counts selected entries or warnings that did not fit. No lesson field is silently truncated. Tool envelopes and the fixed recall label remain outside this search-result budget. The policy reminder is always present; Automatic searches are experimental and require `autoRecall: true`; the default disables automatic searches while retaining the tools.
 
 Reads are bounded to 500 Markdown files, 256 KiB per file and three nested directory levels. Oversized or malformed managed files produce coverage warnings. No hit is not proof that no lesson exists. Semantic contradictions and obsolescence require human/model review; lexical duplicate hints are not semantic detection.
 
