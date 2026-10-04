@@ -132,7 +132,10 @@ Sessions must match this plugin instance's exact real project directory, includi
 ## Development
 
 ```bash
-npm run verify
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run verify
+pnpm run check:release
 npm pack
 ```
 
@@ -141,10 +144,53 @@ Tests use Node's built-in runner and temporary directories. They cover storage r
 Run the separate Linux runtime test with an installed OpenCode V2 executable:
 
 ```bash
-OPENCODE_SMOKE_CLI=/absolute/path/to/opencode npm run test:runtime
+OPENCODE_SMOKE_CLI=/absolute/path/to/opencode pnpm run test:runtime
 ```
 
 The runtime test packs and extracts the distribution, starts an isolated OpenCode server with temporary XDG directories, and serves deterministic model responses over localhost. It checks command registration, Code Mode tool execution, read-only preview, exact acceptance without another model request, automatic recall as untrusted evidence, and context promotion without file changes. No real provider key is used. It requires `npm` and `tar`; CI pins OpenCode 2.0.22 on Linux. Compatibility with Slim's child-session proposal flow is covered separately by the contract harness, not by a full Slim runtime test.
+
+## Releases and npm
+
+The CI and release workflows follow `opencode-model-aliases`: Node 24, pnpm 11, a frozen lockfile, verification and semantic-release 25.0.9. Lessons is plain JavaScript, so verification uses syntax checks and Node tests rather than a TypeScript build. Both workflows also verify the packed plugin in real OpenCode with a local provider fixture. Development dependencies do not become plugin runtime dependencies.
+
+`semantic-release` uses Conventional Commits: `fix:` releases a patch, `feat:` a minor version and `BREAKING CHANGE:` a major version. It publishes the npm package, creates a Git tag and writes GitHub release notes. It does not commit version changes back to `master` or write a changelog into the repository. Git tags and the published package hold the released version.
+
+As in Model Aliases, publishing is gated by the GitHub repository variable `NPM_RELEASE_ENABLED=true`. Until npm authentication is configured, leave that variable unset. CI still runs normally. The release workflow grants only `contents: write` and `id-token: write`, disables issue/PR release comments and serializes releases without cancelling them halfway through.
+
+### First publication
+
+The npm package must exist before its trusted publisher can be configured. From a fresh checkout of `master`, using Node 24 and an npm account authorized to claim `opencode-lessons`:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run verify
+pnpm run check:release
+npm login
+npm publish --access public
+git tag v0.1.2
+git push origin v0.1.2
+```
+
+The tag must point at the commit whose package was published. Create/push it only after a successful publication. The bootstrap version is `0.1.2`; subsequent versions come from semantic-release, not manual package edits. Do not recreate an existing tag or republish an existing npm version.
+
+### Automated publication
+
+In npm's package settings, add a GitHub Actions trusted publisher with:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `vmvarela` |
+| Repository | `opencode-lessons` |
+| Workflow filename | `release.yml` |
+| Environment | Leave empty |
+| Direct publishing | Allow `npm publish` |
+
+Then set `NPM_RELEASE_ENABLED=true` in GitHub Actions repository variables. Push a release-worthy Conventional Commit or run the Release workflow manually from `master`. No permanent npm token is required for subsequent releases. The workflow pins npm 11.6.2, which supports OIDC, and deliberately omits `registry-url` from setup-node to avoid authentication conflicts.
+
+After the package is published, OpenCode can use `"opencode-lessons@latest"` or a pinned npm version instead of the Git specification. Check the [npm package](https://www.npmjs.com/package/opencode-lessons) and [GitHub releases](https://github.com/vmvarela/opencode-lessons/releases) for the actual published version; configuring the workflow alone does not publish it.
+
+References: [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and [semantic-release on GitHub Actions](https://semantic-release.gitbook.io/semantic-release/recipes/ci-configurations/github-actions).
 
 ## MVP boundaries
 

@@ -1,0 +1,73 @@
+name: Release
+
+# Preparado pero DESHABILITADO: solo corre si el repositorio existe y la
+# variable del repo NPM_RELEASE_ENABLED vale "true" (por defecto, sin definir).
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un solo release de cada vez en la misma rama; nunca se cancela a medias.
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Disabled: pivote único. Sin la variable definida (UNSET), el job no corre.
+    if: >-
+      github.repository == 'vmvarela/opencode-lessons' &&
+      github.ref == 'refs/heads/master' &&
+      vars.NPM_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Configure git identity for the release tag
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@11.0.0 --activate
+
+      - name: Pin npm on the runner
+        run: npm install --global npm@11.6.2
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify (syntax + tests)
+        run: pnpm run verify
+
+      - name: Offline release checks
+        run: pnpm run check:release
+
+      - name: Install OpenCode runtime fixture
+        run: npm install --prefix "$RUNNER_TEMP/opencode-runtime" @opencode/cli@2.0.22 --no-audit --no-fund
+
+      - name: Verify packed plugin in OpenCode
+        run: pnpm run test:runtime
+        env:
+          OPENCODE_SMOKE_CLI: ${{ runner.temp }}/opencode-runtime/node_modules/.bin/opencode
+
+      # Nota: el plugin de npm usa OIDC (trusted publishing); no hace falta
+      # ningún token para npm.
+      - name: Release
+        run: pnpm exec semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -3,15 +3,22 @@
   "version": "0.1.2",
   "description": "Scoped, evidence-backed lessons in Git-friendly Markdown for OpenCode V2.",
   "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/vmvarela/opencode-lessons.git" },
+  "homepage": "https://github.com/vmvarela/opencode-lessons#readme",
+  "bugs": { "url": "https://github.com/vmvarela/opencode-lessons/issues" },
+  "publishConfig": { "access": "public" },
+  "packageManager": "pnpm@11.0.0",
   "main": "./index.js",
   "exports": { ".": "./index.js" },
   "files": ["index.js", "src", "README.md", "LICENSE"],
   "scripts": {
     "test": "node --test",
-    "check": "node --check index.js && node --check src/index.js && node --check src/store.js && node --check scripts/runtime-smoke.mjs",
+    "check": "node --check index.js && node --check src/index.js && node --check src/store.js && node --check scripts/runtime-smoke.mjs && node --check scripts/check-release.mjs",
     "test:runtime": "node scripts/runtime-smoke.mjs",
+    "check:release": "node scripts/check-release.mjs",
     "verify": "npm run check && npm test"
   },
+  "devDependencies": { "semantic-release": "25.0.9" },
   "engines": { "node": ">=22" },
   "license": "MIT"
 }
