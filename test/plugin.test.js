@@ -45,6 +45,7 @@ test('user accepts an exact preview once; proposal itself does not write', async
   assert.equal((await h.call('lessons_search', { query: 'Terraform protection' })).matches.length, 1);
   await assert.rejects(h.command('learn-accept', proposal.id), /No pending/);
   assert.equal(h.messages.length, 1);
+  assert.equal(h.messages[0].resume, false);
 });
 
 test('session isolation prevents accepting another session proposal or reading another project', async t => {
@@ -61,6 +62,7 @@ test('dismissal and plugin cleanup remove proposals', async t => {
   const h = await host(t);
   const first = await h.call('lessons_propose', lesson);
   await h.command('learn-dismiss', first.id);
+  assert.equal(h.messages[0].resume, false);
   await assert.rejects(h.command('learn-accept', first.id), /No pending/);
   const second = await h.call('lessons_propose', lesson);
   await h.cleanup();

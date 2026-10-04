@@ -104,7 +104,7 @@ export default {
               try { message = await store.accept(item.proposal); }
               catch (error) { pending.set(id, item); throw error; }
             } else { message = { id, status: 'dismissed', writes: false }; }
-            await ctx.session.synthetic({ sessionID, text: `opencode-lessons: ${JSON.stringify(message)}` });
+            await ctx.session.synthetic({ sessionID, text: `opencode-lessons: ${JSON.stringify(message)}`, resume: false });
           } });
       }
     }));

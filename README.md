@@ -6,7 +6,7 @@ A small OpenCode V2 plugin that proposes scoped, evidence-backed lessons, search
 
 ## Install
 
-Requires Node.js 22+ and the OpenCode V2 plugin API (`tool.transform`, `command.transform`, `session.hook` and `session.get`). The implementation was checked against the published V2 documentation and SDK 2.0.18 declarations; a full real-host OpenCode session is not yet verified.
+Requires Node.js 22+ and the OpenCode V2 plugin API (`tool.transform`, `command.transform`, `session.hook` and `session.get`). The packed plugin is tested in a real OpenCode 2.0.22 server and agent loop, using a deterministic local provider fixture. This verifies integration without a provider account; live remote model behavior and the interactive TUI are not covered.
 
 In `.opencode/opencode.json`:
 
@@ -28,7 +28,7 @@ In `.opencode/opencode.json`:
 
 For reproducibility, replace `master` with the full reviewed commit hash. The plugin does not require Slim; omit its entry if you do not use it. Place Lessons after plugins that rewrite model context. It never changes agents, models, MCP connections or approval settings. Do not load it both explicitly and through auto-discovery.
 
-For local development, configure an absolute path to this checkout or `src/index.js`. Relative plugin paths resolve from the configuration file, not the shell's current directory. No build step, SDK download or runtime dependency is required. This package is not published to npm yet.
+For local development, configure an absolute path to this checkout directory. Configured local plugins must be directories; the root `index.js` forwards to the implementation. Relative plugin paths resolve from the configuration file, not the shell's current directory. No build step, SDK download or runtime dependency is required. This package is not published to npm yet.
 
 Restart/reload OpenCode and check that the commands below appear. If loading fails, inspect OpenCode's plugin status and logs; do not paste credential-bearing resolved configuration. V1 is intentionally unsupported.
 
@@ -49,7 +49,7 @@ Restart/reload OpenCode and check that the commands below appear. If loading fai
 | `/learn-accept <proposal-id>` | Save the exact displayed preview locally, without a model call |
 | `/learn-dismiss <proposal-id>` | Discard a preview, without a model call |
 
-Read-only tools available to agents: `lessons_search`, `lessons_propose`, `lessons_review`, `lessons_promote`. There is deliberately no agent tool for accepting a proposal. A direct user command is the save boundary; this is not protection against an untrusted plugin or an agent already authorized to execute arbitrary shell commands.
+Read-only tools available to agents: `lessons_search`, `lessons_propose`, `lessons_review`, `lessons_promote`. OpenCode may expose these through its Code Mode catalog; follow the host's tool catalog to invoke them. There is deliberately no agent tool for accepting a proposal. A direct user command is the save boundary; this is not protection against an untrusted plugin or an agent already authorized to execute arbitrary shell commands. Acceptance and dismissal record a synthetic result with `resume: false`, so they do not restart the model.
 
 ## Memory format
 
@@ -119,7 +119,15 @@ npm run verify
 npm pack
 ```
 
-Tests use Node's built-in runner and temporary directories. They cover storage round trips, legacy retrieval, duplicate detection, exact-preview acceptance, concurrent writers, linked-path rejection, credential heuristics, context bounds and a V2 host-contract harness. The harness is not a real OpenCode runtime test.
+Tests use Node's built-in runner and temporary directories. They cover storage round trips, legacy retrieval, duplicate detection, exact-preview acceptance, concurrent writers, linked-path rejection, credential heuristics, context bounds and a V2 host-contract harness.
+
+Run the separate Linux runtime test with an installed OpenCode V2 executable:
+
+```bash
+OPENCODE_SMOKE_CLI=/absolute/path/to/opencode npm run test:runtime
+```
+
+The runtime test packs and extracts the distribution, starts an isolated OpenCode server with temporary XDG directories, and serves deterministic model responses over localhost. It checks command registration, Code Mode tool execution, read-only preview, exact acceptance without another model request, and automatic recall as untrusted evidence. No real provider key is used. It requires `npm` and `tar`; CI pins OpenCode 2.0.22 on Linux. Compatibility with Slim's child-session proposal flow is covered separately by the contract harness, not by a full Slim runtime test.
 
 ## MVP boundaries
 
