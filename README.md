@@ -155,7 +155,7 @@ The CI and release workflows follow `opencode-model-aliases`: Node 24, pnpm 11, 
 
 `semantic-release` uses Conventional Commits: `fix:` releases a patch, `feat:` a minor version and `BREAKING CHANGE:` a major version. It publishes the npm package, creates a Git tag and writes GitHub release notes. It does not commit version changes back to `master` or write a changelog into the repository. Git tags and the published package hold the released version.
 
-As in Model Aliases, publishing is gated by the GitHub repository variable `NPM_RELEASE_ENABLED=true`. Until npm authentication is configured, leave that variable unset. CI still runs normally. The release workflow grants only `contents: write` and `id-token: write`, disables issue/PR release comments and serializes releases without cancelling them halfway through.
+Publishing runs automatically on pushes to `master` in `vmvarela/opencode-lessons`, and can also be dispatched manually. Forks do not publish through this workflow. The release workflow grants only `contents: write` and `id-token: write`, disables issue/PR release comments and serializes releases without cancelling them halfway through.
 
 ### First publication
 
@@ -173,7 +173,7 @@ In npm's package settings, add a GitHub Actions trusted publisher with:
 | Environment | Leave empty |
 | Direct publishing | Allow `npm publish` |
 
-Then set `NPM_RELEASE_ENABLED=true` in GitHub Actions repository variables. Push a release-worthy Conventional Commit or run the Release workflow manually from `master`. No permanent npm token is required for subsequent releases. The workflow pins npm 11.6.2, which supports OIDC, and deliberately omits `registry-url` from setup-node to avoid authentication conflicts.
+The repository workflow is enabled; no repository variable is required. Push a release-worthy Conventional Commit or run the Release workflow manually from `master`. No permanent npm token is required for subsequent releases. The workflow pins npm 11.6.2, which supports OIDC, and deliberately omits `registry-url` from setup-node to avoid authentication conflicts.
 
 After the package is published, OpenCode can use `"opencode-lessons@latest"` or a pinned npm version instead of the Git specification. Check the [npm package](https://www.npmjs.com/package/opencode-lessons) and [GitHub releases](https://github.com/vmvarela/opencode-lessons/releases) for the actual published version; configuring the workflow alone does not publish it.
 

@@ -1,7 +1,6 @@
 name: Release
 
-# Preparado pero DESHABILITADO: solo corre si el repositorio existe y la
-# variable del repo NPM_RELEASE_ENABLED vale "true" (por defecto, sin definir).
+# Publicación automática desde master mediante npm trusted publishing.
 on:
   push:
     branches: [master]
@@ -18,11 +17,9 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Disabled: pivote único. Sin la variable definida (UNSET), el job no corre.
     if: >-
       github.repository == 'vmvarela/opencode-lessons' &&
-      github.ref == 'refs/heads/master' &&
-      vars.NPM_RELEASE_ENABLED == 'true'
+      github.ref == 'refs/heads/master'
     permissions:
       contents: write
       id-token: write
