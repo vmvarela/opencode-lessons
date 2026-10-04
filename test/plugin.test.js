@@ -53,7 +53,7 @@ test('session isolation prevents accepting another session proposal or reading a
   const proposal = await h.call('lessons_propose', lesson);
   await assert.rejects(h.command('learn-accept', proposal.id, 'session-b'), /No pending/);
   await assert.rejects(h.call('lessons_search', { query: 'Terraform' }, 'foreign'), /another project/);
-  const event = { sessionID: 'foreign', system: [], messages: [{ role: 'user', content: 'Terraform' }] };
+  const event = { sessionID: 'foreign', system: [], messages: [{ id: 'user-1', role: 'user', content: 'Terraform' }] };
   await h.hooks.get('context')(event);
   assert.deepEqual(event.system, []);
 });
@@ -73,12 +73,12 @@ test('dismissal and plugin cleanup remove proposals', async t => {
 test('recall injects relevant bounded evidence with trust boundaries and uses latest user text', async t => {
   const h = await host(t, { autoRecall: true });
   await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
-  const event = { sessionID: 'session-a', system: [], messages: [{ role: 'assistant', content: 'unrelated' }, { role: 'user', content: [{ type: 'text', text: 'Terraform rulesets' }] }] };
+  const event = { sessionID: 'session-a', system: [], messages: [{ role: 'assistant', content: 'unrelated' }, { id: 'user-1', role: 'user', content: [{ type: 'text', text: 'Terraform rulesets' }] }] };
   await h.hooks.get('context')(event);
-  assert.equal(event.system.length, 2);
-  assert.match(event.system[1].text, /untrusted data/);
-  assert.match(event.system[1].text, /Terraform owns/);
-  const other = { sessionID: 'session-a', system: [], messages: [{ role: 'user', content: 'xylophone' }] };
+  assert.equal(event.system.length, 1);
+  assert.match(event.messages.at(-1).content.at(-1).text, /untrusted data/);
+  assert.match(event.messages.at(-1).content.at(-1).text, /Terraform owns/);
+  const other = { sessionID: 'session-a', system: [], messages: [{ id: 'user-1', role: 'user', content: 'xylophone' }] };
   await h.hooks.get('context')(other);
   assert.equal(other.system.length, 1);
 });
@@ -86,7 +86,7 @@ test('recall injects relevant bounded evidence with trust boundaries and uses la
 test('autoRecall can be disabled without hiding tools or starting another model', async t => {
   const h = await host(t);
   await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
-  const event = { sessionID: 'session-a', system: [], messages: [{ role: 'user', content: 'Terraform' }] };
+  const event = { sessionID: 'session-a', system: [], messages: [{ id: 'user-1', role: 'user', content: 'Terraform' }] };
   await h.hooks.get('context')(event);
   assert.equal(event.system.length, 1);
   assert.equal((await h.call('lessons_search', { query: 'Terraform' })).matches.length, 1);
@@ -142,4 +142,49 @@ test('Slim-style child proposals can be accepted from their parent, not from an 
   await assert.rejects(h.command('learn-accept', proposal.id, 'session-b'), /No pending/);
   await h.command('learn-accept', proposal.id, 'session-a');
   assert.equal((await h.call('lessons_search', { query: 'Terraform' })).matches.length, 1);
+});
+
+
+test('recall freezes each user turn and preserves the previous provider prefix', async t => {
+  const h = await host(t, { autoRecall: true });
+  const context = messages => ({ sessionID: 'session-a', system: [], messages: structuredClone(messages) });
+  const firstMessages = [{ id: 'a', role: 'user', content: 'Terraform rulesets' }];
+  const first = context(firstMessages);
+  await h.hooks.get('context')(first);
+  await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
+  const toolContinuation = context([...firstMessages, { id: 'tool', role: 'tool', content: 'saved' }]);
+  await h.hooks.get('context')(toolContinuation);
+  assert.deepEqual(toolContinuation.messages[0], first.messages[0], 'no retroactive recall within a turn');
+  const nextMessages = [...firstMessages, { id: 'b', role: 'user', content: 'Terraform rulesets' }];
+  const next = context(nextMessages);
+  await h.hooks.get('context')(next);
+  assert.deepEqual(next.system, first.system);
+  assert.deepEqual(next.messages[0], first.messages[0]);
+  assert.match(next.messages[1].content.at(-1).text, /Terraform owns/);
+  const later = context([...nextMessages, { id: 'c', role: 'user', content: 'unrelatedxylophone' }]);
+  await h.hooks.get('context')(later);
+  assert.deepEqual(later.messages.slice(0, 2), next.messages);
+  await h.hooks.get('context')(later);
+  assert.equal(later.messages[1].content.length, 2, 'no duplicate recall on repeat projection');
+});
+
+test('missing user identity skips automatic recall without losing manual search', async t => {
+  const h = await host(t, { autoRecall: true });
+  await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
+  const event = { sessionID: 'session-a', system: [], messages: [{ role: 'user', content: 'Terraform' }] };
+  await h.hooks.get('context')(event);
+  assert.equal(event.messages[0].content, 'Terraform');
+  assert.equal((await h.call('lessons_search', { query: 'Terraform' })).matches.length, 1);
+});
+
+test('compaction drops old snapshots and can recall newly accepted evidence in a new turn', async t => {
+  const h = await host(t, { autoRecall: true });
+  const before = { sessionID: 'session-a', system: [], messages: [{ id: 'before', role: 'user', content: 'Terraform rulesets' }] };
+  await h.hooks.get('context')(before);
+  await h.command('learn-accept', (await h.call('lessons_propose', lesson)).id);
+  const after = { sessionID: 'session-a', system: [], messages: [{ id: 'summary', role: 'assistant', content: 'Compacted context' }, { id: 'after', role: 'user', content: 'Terraform rulesets' }] };
+  await h.hooks.get('context')(after);
+  assert.equal(after.messages[0].content, 'Compacted context');
+  assert.match(after.messages[1].content.at(-1).text, /Terraform owns/);
+  assert.deepEqual(after.system, before.system);
 });

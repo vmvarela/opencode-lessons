@@ -5,11 +5,13 @@ import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // A real OpenCode server and agent loop, with a deterministic local model fixture.
 // No provider account, credentials or external model request is needed.
 const cli = process.env.OPENCODE_SMOKE_CLI;
+const slim = process.env.SLIM_SMOKE_PLUGIN;
+const autoRecall = process.env.LESSONS_SMOKE_RECALL !== 'false';
 if (!cli) throw new Error('Set OPENCODE_SMOKE_CLI to an OpenCode V2 executable.');
 const checkout = fileURLToPath(new URL('..', import.meta.url));
 const run = promisify(execFile);
@@ -58,11 +60,22 @@ try {
   const packed = await run('npm', ['pack', '--json', '--pack-destination', root], { cwd: checkout });
   const archive = JSON.parse(packed.stdout)[0].filename;
   await run('tar', ['-xzf', path.join(root, archive), '-C', root]);
-  const config = { plugins: [{ package: path.join(root, 'package'), options: { autoRecall: true } }], model: 'smoke/fixture', snapshots: false,
+  // V2 local directories load index.js, whereas Slim's npm export is ./server.
+  const slimEntry = path.join(root, 'slim-entry');
+  if (slim) {
+    await mkdir(slimEntry);
+    await writeFile(path.join(slimEntry, 'package.json'), JSON.stringify({ type: 'module' }));
+    await writeFile(path.join(slimEntry, 'index.js'), `export { default } from ${JSON.stringify(pathToFileURL(path.join(slim, 'dist/server/index.js')).href)};`);
+  }
+  const config = { plugins: [...(slim ? [slimEntry] : []), { package: path.join(root, 'package'), options: autoRecall ? { autoRecall: true } : {} }], model: 'smoke/fixture', snapshots: false,
     providers: { smoke: { package: '@opencode/ai/providers/openai-compatible',
       settings: { baseURL: `http://127.0.0.1:${fixture.address().port}/v1`, apiKey: 'fixture' },
       models: { fixture: { name: 'Local deterministic fixture', limit: { context: 32000, output: 2000 } } } } } };
   await writeFile(path.join(project, '.opencode/opencode.json'), JSON.stringify(config));
+  if (slim) await writeFile(path.join(project, '.opencode/oh-my-opencode-slim.json'), JSON.stringify({
+    agents: Object.fromEntries(['orchestrator', 'fixer', 'oracle', 'explorer', 'librarian', 'designer', 'observer'].map(name => [name, { model: 'smoke/fixture', mcps: [] }])),
+    disabled_mcps: ['context7', 'gh_grep'], disabled_hooks: ['auto-update-checker'],
+  }));
   const env = { ...process.env };
   for (const kind of ['CONFIG', 'DATA', 'CACHE', 'STATE']) env[`XDG_${kind}_HOME`] = path.join(root, kind.toLowerCase());
   child = spawn(cli, ['serve', '--hostname', '127.0.0.1', '--port', '0', '--print-logs'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -88,7 +101,9 @@ try {
     await pause();
   }
   assert.ok(plugins.data.some(p => p.id === 'opencode-lessons' && p.state.status === 'active'), 'Lessons plugin is not active.');
+  if (slim) assert.ok(plugins.data.some(p => p.id === 'oh-my-opencode-slim' && p.state.status === 'active'), `Slim must be active alongside Lessons: ${JSON.stringify(plugins.data.map(p => ({ id: p.id, state: p.state })))}`);
   const commands = await api('/api/command');
+  if (slim) for (const name of ['deepwork', 'reflect']) assert.ok(commands.data.some(c => c.name === name), `${name} remains registered`);
   assert.equal(commands.data.filter(c => c.name.startsWith('learn')).length, 6);
   await api(`/api/session/${session.id}/command`, { name: 'learn', text: 'Review the fixture cache correction.' });
   let proposal;
@@ -107,6 +122,7 @@ try {
     console.error('Session context:', JSON.stringify(await api(`/api/session/${session.id}/context`)));
   }
   assert.ok(proposal, 'Agent loop did not return a lesson preview.');
+  if (slim) assert.match(JSON.stringify(requests[0].messages.filter(m => m.role === 'system')), /workflow manager|Orchestrator|orchestrator/);
   assert.ok(requests[0].messages.some(m => m.role === 'system' && m.content.includes('Lessons are scoped evidence')));
   await assert.rejects(readdir(path.join(project, 'memory')), { code: 'ENOENT' });
   const count = requests.length;
@@ -120,9 +136,17 @@ try {
   assert.equal(requests.length, count, 'Acceptance must not resume the model.');
   await api(`/api/session/${session.id}/prompt`, { text: 'Fixture cache needs invalidation recall-only' });
   for (let i = 0; i < 100 && requests.length === count; i++) await pause();
-  const recall = requests.slice(count).find(r => r.messages?.some(m => m.role === 'system' && m.content.includes('Scoped memory evidence')));
-  assert.ok(recall, 'Accepted lesson was not recalled in the next real model request.');
-  assert.ok(recall.messages.some(m => m.role === 'system' && m.content.includes('Fixture cache needs invalidation') && m.content.includes('untrusted data')));
+  const recall = requests[count];
+  assert.ok(recall, 'Expected next model request');
+  const hasEvidence = r => r.messages.some(m => m.role === 'user' && JSON.stringify(m.content).includes('Scoped memory evidence'));
+  assert.equal(hasEvidence(recall), autoRecall, 'recall follows the explicit option');
+  assert.deepEqual(recall.messages.filter(m => m.role === 'system'), requests[0].messages.filter(m => m.role === 'system'), 'recall must leave the system prefix stable');
+  const previousCount = requests.length;
+  await api(`/api/session/${session.id}/prompt`, { text: 'Unrelated xylophone recall-only' });
+  for (let i = 0; i < 100 && requests.length === previousCount; i++) await pause();
+  const later = requests[previousCount];
+  assert.ok(later, 'Expected third turn');
+  assert.deepEqual(later.messages.slice(0, recall.messages.length), recall.messages, 'all earlier provider messages must remain byte-equivalent');
   await mkdir(path.join(project, 'context'));
   const contextFile = path.join(project, 'context/platform.md');
   const contextText = '# Platform\n\nExisting facts, pending review.\n';
@@ -145,7 +169,7 @@ try {
   assert.match(plan.steps.join(' '), /explicit review approval/);
   assert.equal(await readFile(contextFile, 'utf8'), contextText);
   assert.deepEqual(await readdir(project, { recursive: true }), filesBefore);
-  console.log('PASS: packed plugin loads commands, proposes and accepts exact lessons, recalls scoped evidence, and prepares context promotion without writing in real OpenCode.');
+  console.log(`PASS: OpenCode commands, exact acceptance, transition promotion, stable system/history; recall=${autoRecall}, slim=${Boolean(slim)}. Fixture tokens are synthetic, not a provider cache benchmark.`);
 } catch (error) {
   console.error(output.split('\n').filter(line => /WARN|ERROR|FATAL/.test(line)).join('\n'));
   throw error;

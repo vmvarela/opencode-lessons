@@ -32,7 +32,14 @@ jobs:
       - name: Install OpenCode runtime fixture
         run: npm install --prefix "$RUNNER_TEMP/opencode-runtime" @opencode/cli@2.0.22 --no-audit --no-fund
 
-      - name: Verify packed plugin in OpenCode
-        run: pnpm run test:runtime
+      - name: Install Slim integration fixture
+        run: npm install --prefix "$RUNNER_TEMP/slim-fixture" oh-my-opencode-slim@3.0.2 --ignore-scripts --no-audit --no-fund
+
+      - name: Verify manual and automatic recall, alone and with Slim
+        run: |
+          for recall in false true; do
+            LESSONS_SMOKE_RECALL="$recall" pnpm run test:runtime
+            LESSONS_SMOKE_RECALL="$recall" SLIM_SMOKE_PLUGIN="$RUNNER_TEMP/slim-fixture/node_modules/oh-my-opencode-slim" pnpm run test:runtime
+          done
         env:
           OPENCODE_SMOKE_CLI: ${{ runner.temp }}/opencode-runtime/node_modules/.bin/opencode
