@@ -72,7 +72,7 @@ export default {
         }) });
       editor.add({ name: 'lessons_review', description: 'List lexical duplicate hints and superseded entries. No model call and no file changes; semantic contradictions require review.',
         input: schema({}), options: { permission: 'read' }, execute: execute(() => store.review()) });
-      editor.add({ name: 'lessons_promote', description: 'Retrieve a lesson and prepare review steps for a policy/skill proposal. Does not write or adopt rules.',
+      editor.add({ name: 'lessons_promote', description: 'Retrieve a lesson and prepare review steps for project context, instructions or a skill. Does not write files or adopt rules.',
         input: schema({ id: string }), options: { permission: 'read' }, execute: execute(({ id }) => store.promote(id)) });
     }));
 
@@ -80,7 +80,7 @@ export default {
       learn: 'Review this task for at most three reusable corrections or verified lessons. Search for duplicates first. Use lessons_propose only if there is concrete evidence. Show each diff and acceptance command. If nothing is worth learning, say so.',
       'learn-search': 'Search project lessons with lessons_search for the user query below. Report only relevant evidence and its scope.',
       'learn-review': 'Use lessons_review. Inspect relevant entries only if needed. Explain duplicate or obsolescence candidates; do not modify memory automatically.',
-      'learn-promote': 'Use lessons_promote for the lesson ID below. Compare existing relevant policies/skills and prepare a reviewable proposal; do not adopt or merge it.',
+      'learn-promote': 'Use lessons_promote for the lesson ID below. Read relevant context/, AGENTS.md, approved policies and skills. Verify current facts against their actual source of truth; check duplicates and contradictions. Choose only justified destinations: stable project facts in context/, working rules in instructions, reusable procedures in skills, or keep the lesson in memory. Show focused diffs with evidence and the lesson reference. Do not invent repository names or paths. Do not apply changes, create files, mark the lesson incorporated or merge without explicit review approval.',
     };
     registrations.push(await ctx.command.transform((editor) => {
       for (const [name, instruction] of Object.entries(commands)) {

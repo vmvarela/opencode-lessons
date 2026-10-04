@@ -106,14 +106,26 @@ test('superseded lessons are excluded from recall and cannot be promoted', async
   await assert.rejects(store.promote(proposal.id), /superseded/);
 });
 
-test('promotion is a read-only review plan', async t => {
+test('promotion distinguishes context facts, instructions and skills without changing project files', async t => {
   const { store, root } = await fixture(t);
   const proposal = await store.propose(lesson);
   await store.accept(proposal);
+  await mkdir(path.join(root, 'context'));
+  const contextFile = path.join(root, 'context/platform.md');
+  const context = '# Platform\n\nExisting project facts.\n';
+  await writeFile(contextFile, context);
+  const filesBefore = await readdir(root, { recursive: true });
   const before = await readFile(path.join(root, proposal.file), 'utf8');
   const plan = await store.promote(proposal.id);
   assert.equal(plan.writes, false);
+  assert.equal(plan.lesson.id, proposal.id);
+  assert.deepEqual(plan.destinations.map(d => d.type), ['context', 'instruction', 'skill']);
+  assert.match(plan.destinations.find(d => d.type === 'context').purpose, /stable project facts/);
+  assert.match(plan.steps.join(' '), /source of truth/);
+  assert.match(plan.steps.join(' '), /duplicates and contradictions/);
   assert.match(plan.steps.join(' '), /explicit review approval/);
+  assert.equal(await readFile(contextFile, 'utf8'), context);
+  assert.deepEqual(await readdir(root, { recursive: true }), filesBefore);
   assert.equal(await readFile(path.join(root, proposal.file), 'utf8'), before);
 });
 

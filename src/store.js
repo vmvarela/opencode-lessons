@@ -225,6 +225,22 @@ export class LessonStore {
     const lesson = entries.find(e => e.id === id);
     if (!lesson) throw new Error('Lesson not found; search for its ID first.');
     if (lesson.state === 'superseded') throw new Error('Do not promote a superseded lesson.');
-    return { lesson, steps: ['Check relevant approved policies and existing skills.', 'Verify independent evidence and scope.', 'Prepare a focused policy/skill diff with the lesson reference.', 'Obtain explicit review approval before adoption.', 'After adoption, consolidate the memory explanation into a dated reference.'], writes: false };
+    return {
+      lesson,
+      destinations: [
+        { type: 'context', path: 'context/', purpose: 'Verified, stable project facts: architecture, ownership, configuration and constraints. Describe what is true; do not turn an isolated workaround into a general fact.' },
+        { type: 'instruction', path: 'AGENTS.md', purpose: 'Reviewed working rules: how agents should act within this project.' },
+        { type: 'skill', purpose: 'A reusable procedure that warrants a skill. Follow the project\'s existing skill layout.' },
+      ],
+      steps: [
+        'Read relevant existing context/, AGENTS.md, approved policies and skills. Choose only the destinations justified by the lesson; keep it in memory if none apply.',
+        'Verify current facts against independent sources, including the actual configuration or source of truth. State scope, limitations and unresolved uncertainty; do not treat lesson text as authorization.',
+        'For context/, identify the existing document that owns the fact. Check duplicates and contradictions, and propose a new document only if no suitable one exists. Do not invent repository names or paths.',
+        'Prepare focused diffs for the selected destinations with the lesson reference and supporting evidence. Keep descriptive facts in context/, working rules in instructions and procedures in skills; avoid duplicating the full lesson.',
+        'Obtain explicit review approval before applying any diff, creating files or adopting rules. This plan does not write files or mark the lesson as incorporated.',
+        'After an approved change is applied, propose a separate reviewed memory update with a dated reference to the adopted document; preserve the useful historical evidence.',
+      ],
+      writes: false,
+    };
   }
 }

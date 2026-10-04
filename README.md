@@ -45,11 +45,28 @@ Restart/reload OpenCode and check that the commands below appear. If loading fai
 | `/learn` | Ask the active agent for useful lessons from this task |
 | `/learn-search <query>` | Ask the agent to search relevant project lessons |
 | `/learn-review` | Ask the agent to inspect lexical duplicates and obsolete entries |
-| `/learn-promote <lesson-id>` | Prepare review steps toward an existing policy or skill |
+| `/learn-promote <lesson-id>` | Prepare reviewed diffs for project context, instructions or a skill |
 | `/learn-accept <proposal-id>` | Save the exact displayed preview locally, without a model call |
 | `/learn-dismiss <proposal-id>` | Discard a preview, without a model call |
 
 Read-only tools available to agents: `lessons_search`, `lessons_propose`, `lessons_review`, `lessons_promote`. OpenCode may expose these through its Code Mode catalog; follow the host's tool catalog to invoke them. There is deliberately no agent tool for accepting a proposal. A direct user command is the save boundary; this is not protection against an untrusted plugin or an agent already authorized to execute arbitrary shell commands. Acceptance and dismissal record a synthetic result with `resume: false`, so they do not restart the model.
+
+## Promote a lesson
+
+`/learn-promote <lesson-id>` asks the active agent to turn an accepted lesson into a reviewable proposal, choosing only the destinations that are justified:
+
+| Destination | Content |
+| --- | --- |
+| `context/` | Verified, stable project facts: architecture, ownership, configuration and constraints |
+| `AGENTS.md` or an existing policy | Reviewed instructions for how to work in this project |
+| An existing skill layout | A reusable procedure worth documenting as a skill |
+| Keep in `memory/` | A useful experience that does not justify changing context or rules |
+
+For example, a lesson about an API change being overwritten by Terraform may justify updating the existing GitHub platform document in `context/`. The agent must first verify the current Terraform declaration and its actual location, read existing documents, and check for duplicates or contradictions. It then shows a focused diff with the lesson reference and evidence. An isolated workaround is not automatically a stable project fact.
+
+The tool returns the source lesson, destination guidance and review steps. It does not scan `context/` itself or generate/apply a diff; the active agent performs that analysis with its normal tools. No destination is forced, and no file, directory or lesson state is changed by the promotion tool. Applying a proposed context, instruction or skill change requires explicit review approval. `/learn-accept` accepts lesson previews only, not promotion diffs.
+
+`context/` remains outside automatic lesson recall. After an approved change is applied, a separate reviewed memory edit can record the adopted document reference while retaining useful historical evidence.
 
 ## Memory format
 
@@ -127,10 +144,10 @@ Run the separate Linux runtime test with an installed OpenCode V2 executable:
 OPENCODE_SMOKE_CLI=/absolute/path/to/opencode npm run test:runtime
 ```
 
-The runtime test packs and extracts the distribution, starts an isolated OpenCode server with temporary XDG directories, and serves deterministic model responses over localhost. It checks command registration, Code Mode tool execution, read-only preview, exact acceptance without another model request, and automatic recall as untrusted evidence. No real provider key is used. It requires `npm` and `tar`; CI pins OpenCode 2.0.22 on Linux. Compatibility with Slim's child-session proposal flow is covered separately by the contract harness, not by a full Slim runtime test.
+The runtime test packs and extracts the distribution, starts an isolated OpenCode server with temporary XDG directories, and serves deterministic model responses over localhost. It checks command registration, Code Mode tool execution, read-only preview, exact acceptance without another model request, automatic recall as untrusted evidence, and context promotion without file changes. No real provider key is used. It requires `npm` and `tar`; CI pins OpenCode 2.0.22 on Linux. Compatibility with Slim's child-session proposal flow is covered separately by the contract harness, not by a full Slim runtime test.
 
 ## MVP boundaries
 
-No automatic idle-triggered extraction, numeric confidence, transcript database, global memory, semantic search or automatic policy promotion. `/learn-promote` returns a review plan and source lesson, not an adopted skill. Updates to existing entries remain normal reviewed file edits. Scope and review are more useful than automatically accumulating more memory.
+No automatic idle-triggered extraction, numeric confidence, transcript database, global memory, semantic search or automatic promotion. `/learn-promote` returns a review plan and source lesson; the agent prepares any context, instruction or skill diff for review. Updates to existing entries remain normal reviewed file edits. Scope and review are more useful than automatically accumulating more memory.
 
 References: [OpenCode V2 plugins](https://opencode.ai/v2/docs/build/plugins), [plugin configuration](https://opencode.ai/v2/docs/plugins/), [ECC Continuous Learning v2](https://github.com/affaan-m/ECC/blob/main/skills/continuous-learning-v2/SKILL.md). Inspired by ECC's atomic, scoped lessons; no ECC code or runtime dependency is included.

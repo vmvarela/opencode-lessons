@@ -108,6 +108,24 @@ test('bad options and V1 fail visibly rather than loading silently', async t => 
   await assert.rejects(host(t, { unknown: true }), /Unknown/);
 });
 
+test('promotion exposes context review through the tool and user command without writing context', async t => {
+  const h = await host(t);
+  const proposal = await h.call('lessons_propose', lesson);
+  await h.command('learn-accept', proposal.id);
+  const filesBefore = await readdir(h.root, { recursive: true });
+  const plan = await h.call('lessons_promote', { id: proposal.id });
+  assert.equal(plan.destinations.find(d => d.type === 'context').path, 'context/');
+  assert.equal(plan.writes, false);
+  await h.command('learn-promote', proposal.id);
+  const prompt = h.messages.at(-1).text;
+  assert.match(prompt, /stable project facts in context\//);
+  assert.match(prompt, /source of truth/);
+  assert.match(prompt, /Do not apply changes/);
+  assert.match(prompt, /explicit review approval/);
+  assert.ok(prompt.includes(proposal.id));
+  assert.deepEqual(await readdir(h.root, { recursive: true }), filesBefore);
+});
+
 test('cancelled tool work is rejected before scanning or proposing', async t => {
   const h = await host(t);
   const controller = new AbortController();

@@ -30,12 +30,16 @@ const fixture = createServer(async (req, res) => {
     return;
   }
   requests.push(body);
-  const recallOnly = body.messages?.filter(m => m.role === 'user').at(-1)?.content?.includes('recall-only');
+  const userText = body.messages?.filter(m => m.role === 'user').at(-1)?.content ?? '';
+  const recallOnly = userText.includes('recall-only');
+  const promotionID = userText.includes('Use lessons_promote') ? userText.match(/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}/)?.[0] : undefined;
+  const code = promotionID ? `return JSON.parse(await tools.lessons_promote(${JSON.stringify({ id: promotionID })}));` :
+    `return JSON.parse(await tools.lessons_propose(${JSON.stringify(lesson)}));`;
   const alreadyProposed = recallOnly || body.messages?.some(m => m.role === 'tool');
   const message = alreadyProposed ? { role: 'assistant', content: 'Review the preview.' } : {
     role: 'assistant', content: null,
     tool_calls: [{ id: 'call_fixture', type: 'function', function: { name: 'execute',
-      arguments: JSON.stringify({ code: `return JSON.parse(await tools.lessons_propose(${JSON.stringify(lesson)}));` }) } }],
+      arguments: JSON.stringify({ code }) } }],
   };
   res.setHeader('Content-Type', 'text/event-stream');
   const delta = alreadyProposed ? { role: 'assistant', content: message.content } : {
@@ -119,7 +123,29 @@ try {
   const recall = requests.slice(count).find(r => r.messages?.some(m => m.role === 'system' && m.content.includes('Scoped memory evidence')));
   assert.ok(recall, 'Accepted lesson was not recalled in the next real model request.');
   assert.ok(recall.messages.some(m => m.role === 'system' && m.content.includes('Fixture cache needs invalidation') && m.content.includes('untrusted data')));
-  console.log('PASS: packed plugin loads six commands, proposes without writing, accepts the exact preview without model resumption, and recalls scoped evidence in real OpenCode.');
+  await mkdir(path.join(project, 'context'));
+  const contextFile = path.join(project, 'context/platform.md');
+  const contextText = '# Platform\n\nExisting facts, pending review.\n';
+  await writeFile(contextFile, contextText);
+  const filesBefore = await readdir(project, { recursive: true });
+  const promoteStart = requests.length;
+  const promotionSession = (await api('/api/session', { title: 'Promotion runtime smoke', location: { directory: project } })).data;
+  await api(`/api/session/${promotionSession.id}/command`, { name: 'learn-promote', text: proposal.id });
+  let plan;
+  for (let i = 0; i < 100 && !plan; i++) {
+    await pause();
+    for (const request of requests.slice(promoteStart)) {
+      for (const message of request.messages?.filter(m => m.role === 'tool') ?? []) {
+        try { const parsed = JSON.parse(message.content); if (parsed.destinations) plan = parsed; } catch { /* Wait for the promotion tool result. */ }
+      }
+    }
+  }
+  assert.ok(plan?.destinations.some(d => d.type === 'context' && d.path === 'context/'), 'Promotion did not include project context.');
+  assert.equal(plan.writes, false);
+  assert.match(plan.steps.join(' '), /explicit review approval/);
+  assert.equal(await readFile(contextFile, 'utf8'), contextText);
+  assert.deepEqual(await readdir(project, { recursive: true }), filesBefore);
+  console.log('PASS: packed plugin loads commands, proposes and accepts exact lessons, recalls scoped evidence, and prepares context promotion without writing in real OpenCode.');
 } catch (error) {
   console.error(output.split('\n').filter(line => /WARN|ERROR|FATAL/.test(line)).join('\n'));
   throw error;
