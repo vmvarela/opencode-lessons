@@ -1,0 +1,16 @@
+{
+  "name": "opencode-lessons",
+  "version": "0.1.0",
+  "description": "Scoped, evidence-backed lessons in Git-friendly Markdown for OpenCode V2.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "files": ["src", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/index.js && node --check src/store.js",
+    "verify": "npm run check && npm test"
+  },
+  "engines": { "node": ">=22" },
+  "license": "MIT"
+}
