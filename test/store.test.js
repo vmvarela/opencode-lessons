@@ -142,8 +142,9 @@ test('validates evidence, boundaries, tags and likely credentials without echoin
 test('search obeys output budget and does not return irrelevant lessons', async t => {
   const { store } = await fixture(t);
   await store.accept(await store.propose(lesson));
-  const found = await store.search('WSL', 5, 50);
-  assert.ok(found.matches[0].snippet.length <= 50);
+  const found = await store.search('WSL', 5, 64);
+  assert.ok(JSON.stringify(found).length <= 64);
+  assert.equal(found.omitted, 1);
   assert.equal((await store.search('unrelatedxylophone')).matches.length, 0);
 });
 
@@ -171,4 +172,37 @@ test('unknown managed format is a coverage warning, not an empty success', async
   await writeFile(path.join(root, 'memory/future.md'), '---\nopencode_lessons: 2\n---\n# Future\n');
   const found = await store.search('Future');
   assert.equal(found.warnings.length, 1);
+});
+
+
+test('retrieval ranks scope and tolerates reordered wording while rejecting generic overlap', async t => {
+  const { store } = await fixture(t);
+  const first = await store.propose(lesson); await store.accept(first);
+  const other = await store.propose({ ...lesson, scope: 'Debian CI with nvm' }); await store.accept(other);
+  assert.equal((await store.search('Ubuntu WSL Playwright hangs')).matches[0].id, first.id);
+  assert.equal((await store.search('Playwright Debian CI')).matches[0].id, other.id);
+  assert.equal((await store.search('How should I use this for the project')).matches.length, 0);
+  assert.equal((await store.search('unrelated Windows photography')).matches.length, 0);
+});
+
+test('long lessons preserve complete boundaries or return an explicit read reference', async t => {
+  const { store } = await fixture(t);
+  await store.accept(await store.propose({ ...lesson, action: 'Careful action. '.repeat(100) }));
+  const small = await store.search('Playwright WSL', 3, 600);
+  assert.equal(small.matches[0].needsRead, true);
+  assert.equal(small.matches[0].action, undefined);
+  assert.ok(JSON.stringify(small).length <= 600);
+  const full = await store.search('Playwright WSL', 3, 4000);
+  assert.equal(full.matches[0].limits, lesson.limits);
+  assert.equal(full.matches[0].evidence, lesson.evidence);
+  assert.equal(full.matches[0].scope, lesson.scope);
+});
+
+test('the budget includes warning text and metadata', async t => {
+  const { root, store } = await fixture(t);
+  await mkdir(path.join(root, 'memory'));
+  for (let i = 0; i < 15; i++) await writeFile(path.join(root, 'memory', `bad-${i}.md`), '---\nopencode_lessons: 2\n---\n');
+  const result = await store.search('anything', 3, 200);
+  assert.ok(JSON.stringify(result).length <= 200);
+  assert.ok(result.omitted > 0);
 });

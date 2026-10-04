@@ -83,8 +83,9 @@ function legacyEntries(text, file) {
   }).filter(entry => !/^(how to use|entry template|log|register)$/i.test(entry.title));
 }
 
+const STOP_WORDS = new Set('the and for with when this that from into before after use using how what why can should would have has was were not los las del una uno unos unas para por con como cuando esto esta este que sobre usar antes despues'.split(' '));
 function terms(text) {
-  return [...new Set(text.toLowerCase().normalize('NFKC').match(/[\p{L}\p{N}][\p{L}\p{N}_.-]{2,}/gu) ?? [])];
+  return [...new Set(text.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').match(/[\p{L}\p{N}][\p{L}\p{N}_.-]{2,}/gu) ?? [])].filter(w => !STOP_WORDS.has(w));
 }
 
 export class LessonStore {
@@ -150,23 +151,41 @@ export class LessonStore {
 
   async search(query, limit = 5, budget = 6000) {
     if (typeof query !== 'string' || !query.trim() || query.length > 4000) throw new Error('Search needs a query of 1–4000 characters.');
+    if (!Number.isInteger(budget) || budget < 64) throw new Error('Search budget must be at least 64 characters.');
     const { entries, warnings } = await this.entries();
     const words = terms(query);
-    const scored = entries.filter(e => e.state !== 'superseded').map(e => {
-      const haystack = terms(JSON.stringify(e));
-      const title = terms(e.title);
-      const score = words.reduce((sum, word) => sum + (haystack.includes(word) ? 1 : 0) + (title.includes(word) ? 2 : 0), 0);
-      return { entry: e, score };
-    }).filter(e => e.score > 0).sort((a, b) => b.score - a.score || a.entry.file.localeCompare(b.entry.file)).slice(0, Math.min(Math.max(limit, 1), 10));
-    const matches = [];
-    for (const { entry, score } of scored) {
-      const text = entry.managed ? JSON.stringify(entry) : entry.text;
-      const snippet = text.slice(0, Math.min(1800, budget));
-      if (!snippet) break;
-      matches.push({ id: entry.id, file: entry.file, title: entry.title, score, snippet, managed: entry.managed });
-      budget -= snippet.length;
+    const scored = entries.filter(e => e.state !== 'superseded').map(entry => {
+      const title = terms(entry.title), scope = terms(entry.scope ?? '');
+      const anchors = terms([entry.title, entry.trigger, ...(entry.tags ?? [])].join(' '));
+      const content = terms(entry.managed ? FIELDS.map(k => entry[k]).join(' ') : entry.text);
+      const hits = words.filter(w => content.includes(w) || anchors.includes(w));
+      const score = hits.reduce((sum, w) => sum + 1 + (title.includes(w) ? 3 : 0) + (scope.includes(w) ? 4 : 0), 0);
+      const relevant = hits.length >= Math.min(2, words.length) && hits.length > 0 &&
+        (hits.some(w => anchors.includes(w)) || hits.length >= 3);
+      return { entry, score, relevant };
+    }).filter(e => e.relevant).sort((a, b) => b.score - a.score || a.entry.file.localeCompare(b.entry.file));
+    const result = { matches: [], warnings: [], omitted: 0 };
+    const fits = () => JSON.stringify(result).length <= budget;
+    for (const { entry, score } of scored.slice(0, Math.min(Math.max(limit, 1), 10))) {
+      const reference = { id: entry.id, file: entry.file, title: entry.title, score, managed: entry.managed };
+      const match = entry.managed ? { ...reference, ...Object.fromEntries(FIELDS.slice(1).map(k => [k, entry[k]])) } :
+        { ...reference, snippet: entry.text };
+      result.matches.push(match);
+      if (!fits()) {
+        result.matches.pop();
+        // Never expose an action with its conditions silently cut off.
+        result.matches.push({ ...reference, needsRead: true });
+        if (!fits()) { result.matches.pop(); result.omitted++; }
+      }
     }
-    return { matches, warnings };
+    for (const warning of warnings) {
+      result.warnings.push(warning);
+      if (!fits()) { result.warnings.pop(); result.omitted++; }
+    }
+    // Account for growth of the omission counter itself at the boundary.
+    while (!fits() && result.matches.length) { result.matches.pop(); result.omitted++; }
+    while (!fits() && result.warnings.length) { result.warnings.pop(); result.omitted++; }
+    return result;
   }
 
   async propose(input) {
