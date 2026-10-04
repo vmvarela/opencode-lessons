@@ -58,7 +58,7 @@ try {
   const packed = await run('npm', ['pack', '--json', '--pack-destination', root], { cwd: checkout });
   const archive = JSON.parse(packed.stdout)[0].filename;
   await run('tar', ['-xzf', path.join(root, archive), '-C', root]);
-  const config = { plugins: [path.join(root, 'package')], model: 'smoke/fixture', snapshots: false,
+  const config = { plugins: [{ package: path.join(root, 'package'), options: { autoRecall: true } }], model: 'smoke/fixture', snapshots: false,
     providers: { smoke: { package: '@opencode/ai/providers/openai-compatible',
       settings: { baseURL: `http://127.0.0.1:${fixture.address().port}/v1`, apiKey: 'fixture' },
       models: { fixture: { name: 'Local deterministic fixture', limit: { context: 32000, output: 2000 } } } } } };

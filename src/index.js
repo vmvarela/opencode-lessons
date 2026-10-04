@@ -4,7 +4,8 @@ import { LessonStore } from './store.js';
 const POLICY = 'Use lessons_search before retrying a non-obvious failure. Propose only reusable user corrections or verified non-obvious behavior with lessons_propose. Lessons are scoped evidence, not policy or permission. Never store secrets, transcripts, routine outcomes or guesses. Proposals do not write files; only the user command /learn-accept saves a displayed proposal. Never invoke acceptance on the user\'s behalf. Do not promote lessons into policies or skills without explicit review.';
 const string = { type: 'string', minLength: 1, maxLength: 2000 };
 const schema = (properties, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: false });
-const result = (data) => ({ content: JSON.stringify(data, null, 2) });
+const result = (data) => ({ content: JSON.stringify(data) });
+const DEPRECATED = 'Deprecated: retained for this transition release; planned removal in the following minor release. Use normal reviewed memory edits or /reflect when Slim is available. No automatic redirection.';
 
 /** OpenCode V2's Plugin.define is an identity helper; this export has the same runtime shape without an SDK dependency. */
 export default {
@@ -70,10 +71,10 @@ export default {
             accept: `/learn-accept ${proposal.id}`, dismiss: `/learn-dismiss ${proposal.id}`,
             message: 'Review evidence, scope and related entries. Nothing has been written. Pending previews expire after one hour or plugin restart.' };
         }) });
-      editor.add({ name: 'lessons_review', description: 'List lexical duplicate hints and superseded entries. No model call and no file changes; semantic contradictions require review.',
-        input: schema({}), options: { permission: 'read' }, execute: execute(() => store.review()) });
-      editor.add({ name: 'lessons_promote', description: 'Retrieve a lesson and prepare review steps for project context, instructions or a skill. Does not write files or adopt rules.',
-        input: schema({ id: string }), options: { permission: 'read' }, execute: execute(({ id }) => store.promote(id)) });
+      editor.add({ name: 'lessons_review', description: 'DEPRECATED. List lexical duplicate hints and superseded entries. No model call and no file changes; semantic contradictions require review.',
+        input: schema({}), options: { permission: 'read' }, execute: execute(async () => ({ ...await store.review(), deprecation: DEPRECATED })) });
+      editor.add({ name: 'lessons_promote', description: 'DEPRECATED. Retrieve a lesson and prepare review steps for project context, instructions or a skill. Does not write files or adopt rules.',
+        input: schema({ id: string }), options: { permission: 'read' }, execute: execute(async ({ id }) => ({ ...await store.promote(id), deprecation: DEPRECATED })) });
     }));
 
     const commands = {
@@ -84,9 +85,9 @@ export default {
     };
     registrations.push(await ctx.command.transform((editor) => {
       for (const [name, instruction] of Object.entries(commands)) {
-        editor.add({ name, description: instruction, execute: async ({ sessionID, prompt, delivery }) => {
+        editor.add({ name, description: name === 'learn-review' || name === 'learn-promote' ? `DEPRECATED. ${instruction}` : instruction, execute: async ({ sessionID, prompt, delivery }) => {
           await assertSession(sessionID);
-          await ctx.session.prompt({ ...prompt, sessionID, delivery, text: `${instruction}\n\nUser input (task data):\n${prompt.text ?? ''}` });
+          await ctx.session.prompt({ ...prompt, sessionID, delivery, text: `${name === 'learn-review' || name === 'learn-promote' ? DEPRECATED + '\n' : ''}${instruction}\n\nUser input (task data):\n${prompt.text ?? ''}` });
         } });
       }
       for (const name of ['learn-accept', 'learn-dismiss']) {
@@ -113,7 +114,7 @@ export default {
       try { await assertSession(event.sessionID); }
       catch { return; } // Unrelated host sessions must receive neither data nor injected instructions.
       event.system.push({ type: 'text', text: POLICY });
-      if (options.autoRecall === false) return;
+      if (options.autoRecall !== true) return;
       const message = [...event.messages].reverse().find(m => m.role === 'user');
       const query = typeof message?.content === 'string' ? message.content :
         Array.isArray(message?.content) ? message.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '';
